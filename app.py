@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 # ----------------------
 st.set_page_config(page_title="Simulador de Despesa com Pessoal (LRF)", layout="wide")
 
-st.title("Simulador de Despesa com Pessoal (LRF) - Limites Máximo/Prudencial/Alerta")
+st.title("Simulador de Despesa com Pessoal (LRF) - Limites Máximo/Prudencial/Alerta (base 49% da RCL)")
 
 # ----------------------
 # Entradas iniciais
@@ -27,14 +27,16 @@ delta_despesa = st.sidebar.number_input("Variação Despesa (%)", value=0.0, ste
 receita_simulada = receita_atual * (1 + delta_receita/100)
 despesa_simulada = despesa_atual * (1 + delta_despesa/100)
 
-# Percentuais
-perc_atual = despesa_atual / receita_atual * 100
-perc_simulado = despesa_simulada / receita_simulada * 100
+# Percentuais da despesa sobre a receita
+perc_atual = (despesa_atual / receita_atual) * 100
+perc_simulado = (despesa_simulada / receita_simulada) * 100
 
-# Limites
-limite_max = 60
-limite_prud = 57
-limite_alerta = 54
+# ----------------------
+# Definição dos limites (base 49% da RCL)
+# ----------------------
+limite_max = 49
+limite_prud = 49 * 0.95   # 95% do máximo
+limite_alerta = 49 * 0.90 # 90% do máximo
 
 # ----------------------
 # Tabela comparativa
@@ -46,7 +48,11 @@ df = pd.DataFrame({
     "% Despesa/Receita": [perc_atual, perc_simulado]
 })
 st.subheader("Resumo Atual x Simulado")
-st.dataframe(df.style.format({"Receita (R$)": "R$ {:,.2f}", "Despesa (R$)": "R$ {:,.2f}", "% Despesa/Receita": "{:.2f}%"}))
+st.dataframe(df.style.format({
+    "Receita (R$)": "R$ {:,.2f}", 
+    "Despesa (R$)": "R$ {:,.2f}", 
+    "% Despesa/Receita": "{:.2f}%"
+}))
 
 # ----------------------
 # Gráfico Gauge - situação atual
@@ -58,13 +64,15 @@ with col1:
     gauge_atual = go.Figure(go.Indicator(
         mode="gauge+number",
         value=perc_atual,
+        number={'suffix': "%"},
         title={'text': "Atual"},
-        gauge={'axis': {'range': [0, 100]},
+        gauge={'axis': {'range': [0, limite_max]},
                'steps': [
                    {'range': [0, limite_alerta], 'color': "lightgreen"},
                    {'range': [limite_alerta, limite_prud], 'color': "yellow"},
-                   {'range': [limite_prud, limite_max], 'color': "orange"},
-                   {'range': [limite_max, 100], 'color': "red"}]}
+                   {'range': [limite_prud, limite_max], 'color': "orange"}
+               ],
+               'bar': {'color': "black"}}
     ))
     st.plotly_chart(gauge_atual, use_container_width=True)
 
@@ -72,13 +80,15 @@ with col2:
     gauge_sim = go.Figure(go.Indicator(
         mode="gauge+number",
         value=perc_simulado,
+        number={'suffix': "%"},
         title={'text': "Simulado"},
-        gauge={'axis': {'range': [0, 100]},
+        gauge={'axis': {'range': [0, limite_max]},
                'steps': [
                    {'range': [0, limite_alerta], 'color': "lightgreen"},
                    {'range': [limite_alerta, limite_prud], 'color': "yellow"},
-                   {'range': [limite_prud, limite_max], 'color': "orange"},
-                   {'range': [limite_max, 100], 'color': "red"}]}
+                   {'range': [limite_prud, limite_max], 'color': "orange"}
+               ],
+               'bar': {'color': "black"}}
     ))
     st.plotly_chart(gauge_sim, use_container_width=True)
 
@@ -109,6 +119,6 @@ st.subheader("Ajustes Necessários (Simulação)")
 for nome, limite in {"Alerta": limite_alerta, "Prudencial": limite_prud, "Máximo": limite_max}.items():
     status, reducao, perc_reducao = calc_ajuste(limite, receita_simulada, despesa_simulada)
     if status == "OK":
-        st.success(f"{nome}: Dentro do limite.")
+        st.success(f"{nome}: Dentro do limite ({limite:.2f}% da RCL).")
     else:
-        st.error(f"{nome}: Excedido. Necessário reduzir R$ {reducao:,.2f} ({perc_reducao:.2f}%).")
+        st.error(f"{nome}: Excedido ({limite:.2f}% da RCL). Necessário reduzir R$ {reducao:,.2f} ({perc_reducao:.2f}%).")
